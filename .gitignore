@@ -1,0 +1,6 @@
+# Generated diagrams and server state
+output/*
+!output/.gitkeep
+
+# OS noise
+.DS_Store

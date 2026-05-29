@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Codebase Flow Diagram</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/react@12/dist/style.css" />
+  <style>
+    :root {
+      --c-endpoint: #3b82f6;
+      --c-logic: #22c55e;
+      --c-database: #f97316;
+      --c-external: #a855f7;
+      --c-decision: #eab308;
+
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #2563eb;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .app { display: flex; height: 100vh; width: 100vw; overflow: hidden; }
+
+    /* ---------- Sidebar ---------- */
+    .sidebar {
+      width: 300px; flex: 0 0 300px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 22px 20px;
+      overflow-y: auto;
+    }
+    .sidebar .title { font-size: 18px; font-weight: 700; margin: 0 0 6px; line-height: 1.3; }
+    .sidebar .subtitle { color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 20px; }
+
+    .toc { margin-bottom: 22px; }
+    .toc a {
+      display: block; padding: 7px 10px; border-radius: 8px; font-size: 13px;
+      color: var(--text); font-weight: 500;
+    }
+    .toc a:hover { background: var(--bg); text-decoration: none; }
+
+    .side-section h3 {
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+      color: var(--muted); margin: 18px 0 8px;
+    }
+    .side-section ul { list-style: none; padding: 0; margin: 0; }
+    .side-section li { font-size: 13px; padding: 5px 0; line-height: 1.4; }
+    .link-btn {
+      background: none; border: none; padding: 0; margin: 0; text-align: left;
+      color: var(--accent); font: inherit; cursor: pointer;
+    }
+    .link-btn:hover { text-decoration: underline; }
+    .pill {
+      display: inline-block; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 999px; padding: 3px 10px; font-size: 12px; margin: 3px 4px 0 0;
+    }
+
+    /* ---------- Main ---------- */
+    .main { flex: 1 1 auto; display: flex; flex-direction: column; overflow-y: auto; }
+
+    .diagram-wrap {
+      position: relative;
+      height: 62vh; min-height: 360px;
+      flex: 0 0 auto;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .export-btn {
+      position: absolute; top: 12px; right: 12px; z-index: 10;
+      background: var(--accent); color: #fff; border: none; padding: 8px 14px;
+      border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(15,23,42,0.18);
+    }
+    .export-btn:hover { background: #1d4ed8; }
+
+    .docs { padding: 28px 36px 80px; max-width: 900px; }
+    .docs section { margin-bottom: 34px; scroll-margin-top: 16px; }
+    .docs h2 {
+      font-size: 16px; margin: 0 0 14px; padding-bottom: 8px;
+      border-bottom: 2px solid var(--border);
+    }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-left-width: 4px; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px;
+    }
+    .card .card-head { display: flex; align-items: center; gap: 8px; }
+    .card .icon { font-size: 15px; }
+    .card .name { font-weight: 600; font-size: 14px; }
+    .card .ref { margin-left: auto; font-size: 12px; }
+    .card .body { color: var(--muted); font-size: 13px; line-height: 1.5; margin-top: 6px; }
+    .branch { font-size: 13px; padding: 4px 0; }
+    .branch .when { font-weight: 600; }
+
+    /* ---------- React Flow nodes ---------- */
+    .node {
+      position: relative; min-width: 168px; max-width: 220px;
+      background: var(--surface); border: 2px solid #94a3b8;
+      border-radius: 10px; padding: 9px 12px; text-align: center;
+      box-shadow: 0 1px 6px rgba(15,23,42,0.12); cursor: default;
+    }
+    .node.endpoint { border-radius: 999px; }       /* pill / rounded */
+    .node.logic { border-radius: 8px; }
+    .node.database { border-radius: 8px; }
+    .node.external-service { border-radius: 8px; }
+    .node.clickable { cursor: pointer; }
+    .node.clickable:hover { box-shadow: 0 4px 14px rgba(15,23,42,0.2); transform: translateY(-1px); }
+    .node-head { display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .node-icon { font-size: 13px; }
+    .node-badge {
+      font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      color: #fff; padding: 1px 7px; border-radius: 999px;
+    }
+    .node-label { font-size: 13px; font-weight: 600; line-height: 1.25; margin-top: 5px; }
+    .node-file { font-size: 11px; color: var(--accent); margin-top: 4px; word-break: break-all; }
+
+    /* Decision diamond */
+    .node.decision {
+      width: 150px; height: 150px; min-width: 0; max-width: none;
+      background: transparent; border: none; box-shadow: none;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .diamond-bg {
+      position: absolute; inset: 16px; transform: rotate(45deg);
+      border: 2px solid var(--c-decision); background: var(--surface);
+      border-radius: 10px; box-shadow: 0 1px 6px rgba(15,23,42,0.12);
+    }
+    .node.decision.clickable:hover .diamond-bg { box-shadow: 0 4px 14px rgba(15,23,42,0.2); }
+    .node.decision .node-content { position: relative; z-index: 1; padding: 0 8px; }
+
+    .tooltip {
+      position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      background: #0f172a; color: #f8fafc; padding: 9px 11px; border-radius: 8px;
+      font-size: 12px; line-height: 1.45; width: 230px; z-index: 50;
+      box-shadow: 0 8px 22px rgba(15,23,42,0.35); pointer-events: none; text-align: left;
+    }
+    .tooltip .t-ref { color: #93c5fd; display: block; margin-bottom: 4px; word-break: break-all; }
+
+    .toast {
+      position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+      background: #0f172a; color: #f8fafc; padding: 12px 16px; border-radius: 10px;
+      font-size: 13px; z-index: 1000; box-shadow: 0 6px 22px rgba(15,23,42,0.4);
+      max-width: 460px; line-height: 1.45;
+    }
+    .toast a { color: #93c5fd; }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 820px) {
+      .app { flex-direction: column; height: auto; overflow: visible; }
+      .sidebar { width: 100%; flex-basis: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      .main { overflow-y: visible; }
+      .diagram-wrap { height: 70vh; }
+      .docs { padding: 22px 18px 60px; }
+    }
+  </style>
+
+  <!--
+    FLOW DATA — replace the JSON below with the traced flow.
+    Schema:
+      processName   : string
+      description   : string
+      nodes[]       : { id, label, type, file, line, description, position:{x,y} }
+                      type one of: endpoint | logic | database | external-service | decision
+      edges[]       : { id, from, to, label }   (label e.g. "valid"/"invalid"/"true"/"false")
+      decisions[]   : { id, label, file, line, branches:[{ when, then }] }
+      entryPoints[] : { label, file, line }  (a plain "POST /x (file:line)" string also works)
+      externalServices[] : string
+  -->
+  <script id="flow-data" type="application/json">
+  {
+    "processName": "User Signup Flow",
+    "description": "Handles user registration from incoming request through validation, persistence, and welcome notification.",
+    "entryPoints": [
+      { "label": "POST /api/auth/signup", "file": "src/routes/auth.js", "line": 45 }
+    ],
+    "externalServices": ["PostgreSQL (users table)", "SendGrid (welcome email)", "Redis (session cache)"],
+    "decisions": [
+      {
+        "id": "n3", "label": "Validate input", "file": "src/services/auth.js", "line": 20,
+        "branches": [
+          { "when": "valid", "then": "Hash password and create the user" },
+          { "when": "invalid", "then": "Return 400 Bad Request" }
+        ]
+      }
+    ],
+    "nodes": [
+      { "id": "n1", "label": "POST /api/auth/signup", "type": "endpoint", "file": "src/routes/auth.js", "line": 45, "description": "Signup endpoint. Parses the request body and delegates to the auth service.", "position": { "x": 300, "y": 0 } },
+      { "id": "n2", "label": "Validate input", "type": "logic", "file": "src/services/auth.js", "line": 12, "description": "Checks email format and password strength before any DB work.", "position": { "x": 300, "y": 120 } },
+      { "id": "n3", "label": "Valid input?", "type": "decision", "file": "src/services/auth.js", "line": 20, "description": "Branches on validation result.", "position": { "x": 315, "y": 250 } },
+      { "id": "n4", "label": "Return 400 error", "type": "logic", "file": "src/services/auth.js", "line": 25, "description": "Responds with validation errors.", "position": { "x": 580, "y": 280 } },
+      { "id": "n5", "label": "Hash password", "type": "logic", "file": "src/services/auth.js", "line": 30, "description": "Hashes the password with bcrypt before storage.", "position": { "x": 300, "y": 420 } },
+      { "id": "n6", "label": "Save user", "type": "database", "file": "src/models/User.js", "line": 34, "description": "Inserts the new user into the PostgreSQL users table.", "position": { "x": 300, "y": 540 } },
+      { "id": "n7", "label": "Send welcome email", "type": "external-service", "file": "src/services/mailer.js", "line": 8, "description": "Sends the welcome email via SendGrid.", "position": { "x": 300, "y": 660 } },
+      { "id": "n8", "label": "Cache session", "type": "external-service", "file": "src/services/session.js", "line": 15, "description": "Stores the session token in Redis.", "position": { "x": 300, "y": 780 } },
+      { "id": "n9", "label": "Return 201 Created", "type": "logic", "file": "src/services/auth.js", "line": 60, "description": "Responds with the created user and an auth token.", "position": { "x": 300, "y": 900 } }
+    ],
+    "edges": [
+      { "id": "e1", "from": "n1", "to": "n2" },
+      { "id": "e2", "from": "n2", "to": "n3" },
+      { "id": "e3", "from": "n3", "to": "n4", "label": "invalid" },
+      { "id": "e4", "from": "n3", "to": "n5", "label": "valid" },
+      { "id": "e5", "from": "n5", "to": "n6" },
+      { "id": "e6", "from": "n6", "to": "n7" },
+      { "id": "e7", "from": "n7", "to": "n8" },
+      { "id": "e8", "from": "n8", "to": "n9" }
+    ]
+  }
+  </script>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.3.1",
+      "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+      "react-dom": "https://esm.sh/react-dom@18.3.1",
+      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+      "@xyflow/react": "https://esm.sh/@xyflow/react@12?external=react,react-dom",
+      "htm": "https://esm.sh/htm@3.1.1"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="module">
+    import React, { useState } from "react";
+    import { createRoot } from "react-dom/client";
+    import htm from "htm";
+    import {
+      ReactFlow, Background, Controls, MiniMap,
+      Handle, Position, useNodesState, useEdgesState
+    } from "@xyflow/react";
+    import { toPng } from "https://esm.sh/html-to-image@1.11.11";
+
+    const html = htm.bind(React.createElement);
+
+    const TYPE_COLORS = {
+      endpoint: "#3b82f6",
+      logic: "#22c55e",
+      database: "#f97316",
+      "external-service": "#a855f7",
+      decision: "#eab308",
+    };
+    const TYPE_ICONS = {
+      endpoint: "🌐",
+      logic: "⚙️",
+      database: "🗄️",
+      "external-service": "🔗",
+      decision: "❓",
+    };
+    const TYPE_BADGE = { "external-service": "external" };
+
+    const flowData = JSON.parse(document.getElementById("flow-data").textContent);
+
+    // Normalize an entry point that may be a string "Label (file:line)" or an object.
+    function normalizeRef(ref) {
+      if (ref && typeof ref === "object") return ref;
+      const m = String(ref).match(/^(.*?)\s*\(([^()]+):(\d+)\)\s*$/);
+      if (m) return { label: m[1].trim(), file: m[2], line: Number(m[3]) };
+      return { label: String(ref) };
+    }
+
+    /* ---------- Open a code file from a click ---------- */
+    function openCodeFile(filePath, line) {
+      if (!filePath) return;
+      // 1) Claude Code / Cursor in-app file viewer, if present.
+      try {
+        const api = window.claude || window.cursor;
+        if (api && typeof api.openFile === "function") { api.openFile(filePath, line); return; }
+      } catch (e) { /* fall through */ }
+
+      // 2) Editor deep links via a hidden iframe (no popup, no navigation).
+      const enc = encodeURI(filePath);
+      try { fireScheme("cursor://file/" + enc + ":" + (line || 1)); } catch (e) {}
+      try { fireScheme("vscode://file/" + enc + ":" + (line || 1)); } catch (e) {}
+
+      // 3) Friendly fallback: a clickable file:// link + the reference to open manually.
+      const abs = filePath.startsWith("/") ? filePath : "/" + filePath;
+      const fileUrl = "file://" + abs;
+      showToast(
+        "Trying to open <code>" + filePath + (line ? ":" + line : "") + "</code> in your editor.<br/>" +
+        "If nothing opened, <a href=\"" + fileUrl + "\" target=\"_blank\" rel=\"noopener\">open it directly</a> or jump there manually."
+      );
+    }
+    window.openCodeFile = openCodeFile;
+
+    function fireScheme(url) {
+      const f = document.createElement("iframe");
+      f.style.display = "none";
+      f.src = url;
+      document.body.appendChild(f);
+      setTimeout(() => f.remove(), 1200);
+    }
+
+    let toastTimer = null;
+    function showToast(htmlMsg) {
+      let el = document.querySelector(".toast");
+      if (!el) { el = document.createElement("div"); el.className = "toast"; document.body.appendChild(el); }
+      el.innerHTML = htmlMsg;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.remove(), 6000);
+    }
+
+    /* ---------- Custom node ---------- */
+    function FlowNode({ data }) {
+      const [hover, setHover] = useState(false);
+      const color = TYPE_COLORS[data.type] || "#64748b";
+      const icon = TYPE_ICONS[data.type] || "•";
+      const isDecision = data.type === "decision";
+      const clickable = !!data.file;
+      const badge = TYPE_BADGE[data.type] || data.type;
+
+      const tooltip = (hover && (data.description || data.file)) ? html`
+        <div class="tooltip">
+          ${data.file ? html`<span class="t-ref">${data.file}${data.line ? ":" + data.line : ""}</span>` : null}
+          ${data.description || ""}
+        </div>` : null;
+
+      const content = html`
+        <div class="node-content">
+          <div class="node-head">
+            <span class="node-icon">${icon}</span>
+            <span class="node-badge" style=${{ background: color }}>${badge}</span>
+          </div>
+          <div class="node-label">${data.label}</div>
+          ${data.file ? html`<div class="node-file">${data.file}${data.line ? ":" + data.line : ""}</div>` : null}
+        </div>`;
+
+      const handlers = {
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        onClick: () => clickable && openCodeFile(data.file, data.line),
+      };
+
+      if (isDecision) {
+        return html`
+          <div class=${"node decision" + (clickable ? " clickable" : "")} ...${handlers}>
+            <div class="diamond-bg"></div>
+            <${Handle} type="target" position=${Position.Top} />
+            ${content}
+            <${Handle} type="source" position=${Position.Bottom} />
+            ${tooltip}
+          </div>`;
+      }
+
+      return html`
+        <div class=${"node " + data.type + (clickable ? " clickable" : "")}
+             style=${{ borderColor: color }} ...${handlers}>
+          <${Handle} type="target" position=${Position.Top} />
+          ${content}
+          <${Handle} type="source" position=${Position.Bottom} />
+          ${tooltip}
+        </div>`;
+    }
+    const nodeTypes = { flowNode: FlowNode };
+
+    const initialNodes = (flowData.nodes || []).map((n, i) => ({
+      id: n.id,
+      type: "flowNode",
+      position: n.position || { x: 300, y: i * 120 },
+      data: n,
+    }));
+    const initialEdges = (flowData.edges || []).map((e, i) => ({
+      id: e.id || "e" + i,
+      source: e.from || e.source,
+      target: e.to || e.target,
+      label: e.label,
+      animated: true,
+      labelStyle: { fill: "#0f172a", fontSize: 12, fontWeight: 600 },
+      labelBgStyle: { fill: "#ffffff", fillOpacity: 0.9 },
+      labelBgPadding: [6, 3],
+      labelBgBorderRadius: 6,
+      style: { stroke: "#94a3b8", strokeWidth: 2 },
+      markerEnd: { type: "arrowclosed", color: "#94a3b8" },
+    }));
+
+    function exportPng() {
+      const target = document.querySelector(".react-flow__viewport");
+      const container = document.querySelector(".react-flow");
+      if (!target || !container) return;
+      toPng(target, {
+        backgroundColor: "#ffffff",
+        width: container.clientWidth,
+        height: container.clientHeight,
+        style: { width: container.clientWidth + "px", height: container.clientHeight + "px" },
+      }).then((dataUrl) => {
+        const a = document.createElement("a");
+        a.download = (flowData.processName || "flow").replace(/\s+/g, "-").toLowerCase() + ".png";
+        a.href = dataUrl;
+        a.click();
+      }).catch(() => showToast("PNG export failed."));
+    }
+
+    /* ---------- Sidebar ---------- */
+    function Sidebar() {
+      const entries = (flowData.entryPoints || []).map(normalizeRef);
+      const externals = flowData.externalServices || [];
+      return html`
+        <aside class="sidebar">
+          <h1 class="title">${flowData.processName || "Flow Diagram"}</h1>
+          <div class="subtitle">${flowData.description || ""}</div>
+
+          <nav class="toc">
+            <a href="#entry-points">Entry Points</a>
+            <a href="#core-flow">Core Flow Steps</a>
+            <a href="#decision-points">Decision Points</a>
+            <a href="#external-services">External Services</a>
+          </nav>
+
+          <div class="side-section">
+            <h3>Entry Points</h3>
+            <ul>
+              ${entries.length ? entries.map((e, i) => html`
+                <li key=${i}>
+                  ${e.file
+                    ? html`<button class="link-btn" onClick=${() => openCodeFile(e.file, e.line)}>${e.label}</button>
+                           <div><code>${e.file}${e.line ? ":" + e.line : ""}</code></div>`
+                    : e.label}
+                </li>`) : html`<li>None recorded</li>`}
+            </ul>
+          </div>
+
+          <div class="side-section">
+            <h3>External Dependencies</h3>
+            <div>
+              ${externals.length
+                ? externals.map((e, i) => html`<span class="pill" key=${i}>${e}</span>`)
+                : html`<span>None recorded</span>`}
+            </div>
+          </div>
+        </aside>`;
+    }
+
+    /* ---------- Docs sections below the diagram ---------- */
+    function Docs() {
+      const entries = (flowData.entryPoints || []).map(normalizeRef);
+      const steps = (flowData.nodes || []).filter((n) => n.type !== "decision");
+      const decisions = flowData.decisions || [];
+      const externals = flowData.externalServices || [];
+
+      return html`
+        <div class="docs">
+          <section id="entry-points">
+            <h2>Entry Points</h2>
+            ${entries.map((e, i) => html`
+              <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS.endpoint }}>
+                <div class="card-head">
+                  <span class="icon">🌐</span>
+                  <span class="name">${e.label}</span>
+                  ${e.file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(e.file, e.line)}><code>${e.file}:${e.line}</code></button></span>` : null}
+                </div>
+              </div>`)}
+          </section>
+
+          <section id="core-flow">
+            <h2>Core Flow Steps</h2>
+            ${steps.map((n, i) => html`
+              <div class="card" key=${n.id} style=${{ borderLeftColor: TYPE_COLORS[n.type] || "#94a3b8" }}>
+                <div class="card-head">
+                  <span class="icon">${TYPE_ICONS[n.type] || "•"}</span>
+                  <span class="name">${i + 1}. ${n.label}</span>
+                  ${n.file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(n.file, n.line)}><code>${n.file}:${n.line}</code></button></span>` : null}
+                </div>
+                ${n.description ? html`<div class="body">${n.description}</div>` : null}
+              </div>`)}
+          </section>
+
+          <section id="decision-points">
+            <h2>Decision Points</h2>
+            ${decisions.length ? decisions.map((d, i) => html`
+              <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS.decision }}>
+                <div class="card-head">
+                  <span class="icon">❓</span>
+                  <span class="name">${d.label || d.condition || "Decision"}</span>
+                  ${d.file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(d.file, d.line)}><code>${d.file}:${d.line}</code></button></span>` : null}
+                </div>
+                ${(d.branches || []).map((b, j) => html`
+                  <div class="branch" key=${j}><span class="when">${b.when}:</span> ${b.then}</div>`)}
+              </div>`) : html`<div class="card">No decision points recorded.</div>`}
+          </section>
+
+          <section id="external-services">
+            <h2>External Services</h2>
+            ${externals.length ? externals.map((e, i) => html`
+              <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS["external-service"] }}>
+                <div class="card-head"><span class="icon">🔗</span><span class="name">${e}</span></div>
+              </div>`) : html`<div class="card">No external services recorded.</div>`}
+          </section>
+        </div>`;
+    }
+
+    /* ---------- App ---------- */
+    function Diagram() {
+      const [nodes, , onNodesChange] = useNodesState(initialNodes);
+      const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+      return html`
+        <${ReactFlow}
+          nodes=${nodes}
+          edges=${edges}
+          nodeTypes=${nodeTypes}
+          onNodesChange=${onNodesChange}
+          onEdgesChange=${onEdgesChange}
+          fitView
+          minZoom=${0.15}
+          proOptions=${{ hideAttribution: true }}>
+          <${Background} color="#cbd5e1" gap=${20} />
+          <${MiniMap} pannable zoomable />
+          <${Controls} />
+        <//>`;
+    }
+
+    function App() {
+      return html`
+        <div class="app">
+          <${Sidebar} />
+          <div class="main">
+            <div class="diagram-wrap">
+              <button class="export-btn" onClick=${exportPng}>Export to PNG</button>
+              <${Diagram} />
+            </div>
+            <${Docs} />
+          </div>
+        </div>`;
+    }
+
+    createRoot(document.getElementById("root")).render(html`<${App} />`);
+  </script>
+</body>
+</html>

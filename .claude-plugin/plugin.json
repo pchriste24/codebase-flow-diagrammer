@@ -1,0 +1,8 @@
+{
+  "name": "codebase-flow-diagrammer",
+  "description": "Visual codebase flow explorer: identify core processes, generate guided tours, and create interactive HTML diagrams with JointJS featuring clickable code references",
+  "version": "1.0.0",
+  "author": {
+    "name": "Phil Christensen"
+  }
+}
