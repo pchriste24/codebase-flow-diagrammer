@@ -1,4 +1,5 @@
 ---
+name: flow-diagrammer
 description: Visual codebase flow explorer that identifies core processes, traces execution paths, and generates interactive React Flow (xyflow) diagrams with clickable code references. Use when user wants to understand codebase architecture, get a guided tour of processes/services, or visualize data flows.
 ---
 
