@@ -12,6 +12,17 @@ A Claude Code plugin that visualizes codebase processes with interactive React F
 
 ## Installation
 
+### Option A — install the skill globally (recommended)
+
+```bash
+npx skills add pchriste24/codebase-flow-diagrammer -g
+```
+
+This installs the `flow-diagrammer` skill (with its bundled `templates/` and `bin/`)
+into your global skills directory. Invoke it in any project with `/flow-diagrammer`.
+
+### Option B — run as a Claude Code plugin
+
 ```bash
 # Install Claude Code globally
 npm install -g @anthropic-ai/claude-code
@@ -22,6 +33,10 @@ cd your-project
 # Run Claude Code with this plugin
 claude --plugin-dir ./codebase-flow-diagrammer
 ```
+
+> The HTML template and server script are bundled **inside**
+> `skills/flow-diagrammer/` so they travel with the skill on install. Generated
+> diagrams are written into a `flow-diagrams/` directory in your current project.
 
 ## Usage
 

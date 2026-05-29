@@ -46,16 +46,27 @@ Create a structured JSON representation with:
 Node types: `endpoint`, `logic`, `database`, `external-service`, `decision`
 
 ### Step 4: Generate Interactive HTML with React Flow (docs-canvas style)
-1. Copy `templates/flow-diagram.html` to `output/{process-name}-flow.html`
-2. Replace the placeholder JSON data with actual flow data:
+
+This skill **bundles** the HTML template. Do **NOT** build the HTML from scratch —
+always start from the bundled template so output stays consistent.
+
+1. Locate the bundled template at `templates/flow-diagram.html` **relative to this
+   SKILL.md file** (i.e. the skill's own directory — the same directory this file
+   lives in). Read it from there; it is not in the user's project.
+2. Create an output directory in the **user's current working directory** (e.g.
+   `./flow-diagrams/`) and copy the template to
+   `./flow-diagrams/{process-name}-flow.html`. Never write generated files into the
+   skill's install directory.
+3. Replace the placeholder JSON inside the `<script id="flow-data">` block with the
+   actual flow data:
    - processName, description
    - nodes (with file:line, type, label)
    - edges (from, to, label)
    - decisions (conditions and next steps)
    - entryPoints and externalServices
-3. The HTML should be self-contained and open in any browser
-4. Start a local HTTP server serving the `output/` directory on a random port
-5. Print the URL to the user
+4. The HTML is self-contained and opens in any browser.
+5. Start a local HTTP server serving the output directory on a random port (see Step 5).
+6. Print the URL to the user.
 
 The data is injected via an embedded JSON `<script>` block that the page reads on load:
 
@@ -94,10 +105,13 @@ The generated page (docs-canvas style) includes:
 - Zoom/pan, a minimap, and an "Export to PNG" button
 
 ### Step 5: Spin Up Local Server
-- Create `output/` directory if it doesn't exist
-- Start a simple HTTP server on a random port serving the `output/` directory
-- Print the local URL to the user (e.g., "http://localhost:4321/user-signup-flow.html")
-- Provide summary of the flow in the chat
+- Serve the output directory created in Step 4 (e.g. `./flow-diagrams/`) on a random port.
+- Use the bundled helper (relative to this SKILL.md):
+  `bash bin/start-server.sh ./flow-diagrams` — it picks a random free port and prints the URL.
+  (Or run `python3 -m http.server <port>` from that directory directly.)
+- Run it in the background so the session can continue.
+- Print the local URL to the user (e.g., "http://localhost:4321/user-signup-flow.html").
+- Provide a summary of the flow in the chat.
 
 ## Output Format
 

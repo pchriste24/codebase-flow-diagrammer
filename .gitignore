@@ -1,6 +1,6 @@
-# Generated diagrams and server state
-output/*
-!output/.gitkeep
+# Generated diagrams (written into the user's project at runtime, not this repo)
+flow-diagrams/
+*-flow.html
 
 # OS noise
 .DS_Store
