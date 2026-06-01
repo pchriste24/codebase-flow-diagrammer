@@ -207,6 +207,10 @@
     Schema:
       processName   : string                 (title)
       description   : string
+      projectRoot   : string   (ABSOLUTE path of the project. Required for clickable
+                                code links: node file paths are relative to it, and
+                                VS Code's vscode://file/ handler needs absolute paths.
+                                The skill fills this with the user's working directory.)
       diagramType   : "process" | "algorithm"   (default "process")
       direction     : "TB" | "LR"            (layout direction; default "TB".
                                               LR reads better for wide decision trees)
@@ -245,6 +249,7 @@
   {
     "processName": "User Signup Flow",
     "description": "Handles user registration from incoming request through validation, persistence, and welcome notification.",
+    "projectRoot": "/absolute/path/to/your/project",
     "entryPoints": [
       { "label": "POST /api/auth/signup", "file": "src/routes/auth.js", "line": 45 }
     ],
@@ -388,6 +393,11 @@
     // Each value is a full flow-data object (its own nodes/edges/diagramType/etc.).
     const SUBDIAGRAMS = flowData.subDiagrams || {};
 
+    // Absolute path of the project the diagram was generated for. The skill fills
+    // this with the user's working directory so vscode://file links resolve
+    // (node file paths are stored relative to it).
+    const PROJECT_ROOT = (flowData.projectRoot || "").replace(/\/+$/, "");
+
     // Layout direction is per-diagram: TB (top-bottom) default, LR for wide trees.
     function posFor(dir) {
       return dir === "LR"
@@ -406,37 +416,35 @@
       return { label: String(ref) };
     }
 
-    /* ---------- Open a code file from a click ---------- */
+    /* ---------- Open a code file in VS Code ----------
+       Uses the vscode://file/<absolute-path>:<line>:<col> URL handler. The path
+       must be absolute, so relative node paths are resolved against PROJECT_ROOT. */
+    function toAbsPath(filePath) {
+      if (filePath.startsWith("/")) return filePath;          // already absolute
+      const rel = filePath.replace(/^\.?\//, "");
+      return PROJECT_ROOT ? PROJECT_ROOT + "/" + rel : null;  // need a root to resolve
+    }
+
     function openCodeFile(filePath, line) {
       if (!filePath) return;
-      // 1) Claude Code / Cursor in-app file viewer, if present.
-      try {
-        const api = window.claude || window.cursor;
-        if (api && typeof api.openFile === "function") { api.openFile(filePath, line); return; }
-      } catch (e) { /* fall through */ }
-
-      // 2) Editor deep links via a hidden iframe (no popup, no navigation).
-      const enc = encodeURI(filePath);
-      try { fireScheme("cursor://file/" + enc + ":" + (line || 1)); } catch (e) {}
-      try { fireScheme("vscode://file/" + enc + ":" + (line || 1)); } catch (e) {}
-
-      // 3) Friendly fallback: a clickable file:// link + the reference to open manually.
-      const abs = filePath.startsWith("/") ? filePath : "/" + filePath;
-      const fileUrl = "file://" + abs;
-      showToast(
-        "Trying to open <code>" + filePath + (line ? ":" + line : "") + "</code> in your editor.<br/>" +
-        "If nothing opened, <a href=\"" + fileUrl + "\" target=\"_blank\" rel=\"noopener\">open it directly</a> or jump there manually."
-      );
+      const abs = toAbsPath(filePath);
+      if (!abs) {
+        showToast(
+          "Can't open <code>" + filePath + "</code> — it's a relative path and no " +
+          "<code>projectRoot</code> is set in the diagram data. Set it to your project's " +
+          "absolute path so VS Code links resolve."
+        );
+        return;
+      }
+      // vscode://file/<path>:<line>:<col> — encode the path, keep the :line:col suffix literal.
+      const url = "vscode://file/" + encodeURI(abs) + ":" + (line || 1) + ":1";
+      const a = document.createElement("a");
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     }
     window.openCodeFile = openCodeFile;
-
-    function fireScheme(url) {
-      const f = document.createElement("iframe");
-      f.style.display = "none";
-      f.src = url;
-      document.body.appendChild(f);
-      setTimeout(() => f.remove(), 1200);
-    }
 
     let toastTimer = null;
     function showToast(htmlMsg) {

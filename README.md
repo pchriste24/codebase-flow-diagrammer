@@ -107,6 +107,8 @@ Click nodes to jump to code. Hover for context.
 - Loop-back edges drawn dashed; cycles handled automatically
 - Drillable nodes (with a `subDiagram`) zoom into a nested diagram with breadcrumbs
 - Adaptive sidebar/docs — sections render only when their data is present
+- Clickable code references open in **VS Code** via `vscode://file/` (the diagram's
+  `projectRoot` is set to your project's absolute path so the links resolve)
 - Export to PNG
 
 ## Development

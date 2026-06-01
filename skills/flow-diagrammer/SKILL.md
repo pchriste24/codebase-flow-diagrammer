@@ -77,6 +77,10 @@ at the top of `templates/flow-diagram.html`; the key fields:
 **Always:**
 - `processName`: title of the diagram
 - `description`: one-line summary
+- `projectRoot`: **absolute** path of the user's project (the working directory).
+  Required for clickable code links — node `file` paths are stored relative to it,
+  and the page opens them in VS Code via `vscode://file/<abs>:<line>`, which needs an
+  absolute path. Fill this with the cwd (e.g. run `pwd`).
 - `diagramType`: `"process"` (default) or `"algorithm"`
 - `direction`: `"TB"` (default, top→bottom) or `"LR"` (left→right — better for wide
   decision trees)
@@ -164,6 +168,7 @@ The data is injected via an embedded JSON `<script>` block that the page reads o
 {
   "processName": "User Signup Flow",
   "description": "Handles user registration from request to database persistence",
+  "projectRoot": "/Users/you/projects/myapp",
   "diagramType": "process",
   "nodes": [...],
   "edges": [...],
@@ -192,9 +197,9 @@ The generated page (docs-canvas style) includes:
   - start/terminal/return/end: stadium (teal / slate)
   - loop: cyan (#06b6d4), dashed
   - input/output: pink (#ec4899) / indigo (#6366f1)
-- Clickable nodes (`openCodeFile(filePath, line)`) that open the file in
-  Claude/Cursor's viewer, fall back to an editor deep link / `file://` URL, and
-  show a friendly message if it can't open
+- Clickable nodes (`openCodeFile(filePath, line)`) that open the file in **VS Code**
+  via the `vscode://file/<abs>:<line>` handler (relative paths resolved against
+  `projectRoot`); if `projectRoot` is missing it shows a message explaining why
 - **Drillable nodes** (those with a `subDiagram`): a double border + `⤵` badge;
   clicking the body zooms into the nested diagram with a breadcrumb to climb back,
   while clicking the node's file:line still opens the code
