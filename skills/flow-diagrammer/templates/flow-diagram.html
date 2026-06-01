@@ -171,8 +171,9 @@
     Schema:
       processName   : string
       description   : string
-      nodes[]       : { id, label, type, file, line, description, position:{x,y} }
+      nodes[]       : { id, label, type, file, line, description }
                       type one of: endpoint | logic | database | external-service | decision
+                      (positions are auto-computed via dagre — no need to supply x/y)
       edges[]       : { id, from, to, label }   (label e.g. "valid"/"invalid"/"true"/"false")
       decisions[]   : { id, label, file, line, branches:[{ when, then }] }
       entryPoints[] : { label, file, line }  (a plain "POST /x (file:line)" string also works)
@@ -244,6 +245,7 @@
       Handle, Position, useNodesState, useEdgesState
     } from "@xyflow/react";
     import { toPng } from "https://esm.sh/html-to-image@1.11.11";
+    import dagre from "https://esm.sh/@dagrejs/dagre@1.1.4";
 
     const html = htm.bind(React.createElement);
 
@@ -367,25 +369,56 @@
     }
     const nodeTypes = { flowNode: FlowNode };
 
-    const initialNodes = (flowData.nodes || []).map((n, i) => ({
-      id: n.id,
-      type: "flowNode",
-      position: n.position || { x: 300, y: i * 120 },
-      data: n,
+    // Node footprints used for layout spacing (must comfortably exceed the
+    // rendered node so multi-line labels never overlap).
+    const NODE_SIZE = { width: 230, height: 110 };
+    const DECISION_SIZE = { width: 170, height: 170 };
+    const sizeFor = (type) => (type === "decision" ? DECISION_SIZE : NODE_SIZE);
+
+    const rawNodes = (flowData.nodes || []).map((n) => ({
+      id: n.id, type: "flowNode", position: { x: 0, y: 0 }, data: n,
     }));
     const initialEdges = (flowData.edges || []).map((e, i) => ({
       id: e.id || "e" + i,
       source: e.from || e.source,
       target: e.to || e.target,
       label: e.label,
-      animated: true,
+      type: "smoothstep",
       labelStyle: { fill: "#0f172a", fontSize: 12, fontWeight: 600 },
-      labelBgStyle: { fill: "#ffffff", fillOpacity: 0.9 },
+      labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95 },
       labelBgPadding: [6, 3],
       labelBgBorderRadius: 6,
-      style: { stroke: "#94a3b8", strokeWidth: 2 },
-      markerEnd: { type: "arrowclosed", color: "#94a3b8" },
+      style: { stroke: "#475569", strokeWidth: 2 },
+      markerEnd: { type: "arrowclosed", color: "#475569", width: 20, height: 20 },
     }));
+
+    // Auto-layout with dagre so nodes never overlap and edges stay readable.
+    // This overrides any positions in the data — the tracer doesn't need to
+    // compute coordinates.
+    function autoLayout(nodes, edges) {
+      try {
+        const g = new dagre.graphlib.Graph();
+        g.setGraph({ rankdir: "TB", nodesep: 80, ranksep: 110, marginx: 24, marginy: 24 });
+        g.setDefaultEdgeLabel(() => ({}));
+        nodes.forEach((n) => {
+          const s = sizeFor(n.data.type);
+          g.setNode(n.id, { width: s.width, height: s.height });
+        });
+        edges.forEach((e) => g.setEdge(e.source, e.target));
+        dagre.layout(g);
+        return nodes.map((n) => {
+          const p = g.node(n.id);
+          const s = sizeFor(n.data.type);
+          return { ...n, position: { x: p.x - s.width / 2, y: p.y - s.height / 2 } };
+        });
+      } catch (e) {
+        // Fallback: simple vertical stack (or any positions supplied in data).
+        return nodes.map((n, i) => ({
+          ...n, position: n.data.position || { x: 320, y: i * 150 },
+        }));
+      }
+    }
+    const initialNodes = autoLayout(rawNodes, initialEdges);
 
     function exportPng() {
       const target = document.querySelector(".react-flow__viewport");
@@ -514,7 +547,8 @@
           onNodesChange=${onNodesChange}
           onEdgesChange=${onEdgesChange}
           fitView
-          minZoom=${0.15}
+          fitViewOptions=${{ padding: 0.2 }}
+          minZoom=${0.1}
           proOptions=${{ hideAttribution: true }}>
           <${Background} color="#cbd5e1" gap=${20} />
           <${MiniMap} pannable zoomable />
