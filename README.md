@@ -6,9 +6,14 @@ A Claude Code plugin that visualizes codebase processes with interactive React F
 
 - **Process Search**: Provide a search term (e.g., "user signup", "payment processing")
 - **Automated Investigation**: Traces entry points, execution paths, and dependencies
+- **Two modes**: high-level **process** flows across services, or single-service
+  **algorithm** / decision-tree / control-flow diagrams (loops, guards, returns)
+- **Drill-down**: a process node whose core logic is a non-trivial algorithm can zoom
+  into a nested sub-diagram, with breadcrumb navigation
 - **Interactive Diagrams**: React Flow-based HTML pages with clickable code references
-- **Guided Tours**: Context, descriptions, and high-level decision points
-- **Local Server**: Spins up a local page to view the diagram
+- **Auto-layout**: nodes positioned by dagre (no overlap, handles loops/cycles; TB or LR)
+- **Guided Tours**: context, descriptions, and high-level decision points
+- **Local Server**: spins up a local page to view the diagram
 
 ## Installation
 
@@ -40,12 +45,16 @@ claude --plugin-dir ./codebase-flow-diagrammer
 
 ## Usage
 
+Invoke the skill and pass the process or function you want diagrammed:
+
 ```bash
-# Usage with argument (the process/search term)
-/codebase-flow-diagrammer:flow "user signup flow"
-/codebase-flow-diagrammer:flow "payment processing"
-/codebase-flow-diagrammer:flow "order creation"
+/flow-diagrammer "user signup flow"
+/flow-diagrammer "payment processing"
+/flow-diagrammer "the row-matching algorithm in src/match.js"
 ```
+
+For a single-service algorithm or decision tree, just describe the function — the
+skill picks `algorithm` mode and traces the internal control flow.
 
 ## What It Does
 
@@ -88,11 +97,17 @@ Click nodes to jump to code. Hover for context.
 
 ## Technical Details
 
-- Uses React Flow (xyflow) for diagram rendering
-- Generates self-contained HTML with embedded CSS/JS
-- Color-coded node types (endpoints, logic, databases, external services)
-- Decision points shown as diamond nodes
-- Decision branches with labeled edges
+- Uses React Flow (xyflow) for diagram rendering, with dagre auto-layout
+- A single HTML file per diagram; React Flow / dagre load from CDN at runtime
+  (so viewing needs network access), with data injected as an embedded JSON block
+- Color-coded node types:
+  - process: `endpoint`, `logic`, `database`, `external-service`, `decision`
+  - algorithm: `start`, `terminal`/`return`/`end`, `loop`, `input`, `output`
+- Decision points shown as diamond nodes; branches drawn as labeled edges
+- Loop-back edges drawn dashed; cycles handled automatically
+- Drillable nodes (with a `subDiagram`) zoom into a nested diagram with breadcrumbs
+- Adaptive sidebar/docs — sections render only when their data is present
+- Export to PNG
 
 ## Development
 
