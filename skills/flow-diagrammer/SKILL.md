@@ -12,14 +12,35 @@ Given a search term for a desired process, this skill will:
 3. Generate a local interactive HTML page with a React Flow (xyflow) diagram
 4. Include context, descriptions, high-level decisions, and clickable references to relevant code files
 
+### Two diagram modes
+The same template renders either mode — set `diagramType` in the data:
+
+- **`"process"`** (default) — a flow that spans **multiple services**: routes,
+  handlers, DB calls, external APIs. The original use case.
+- **`"algorithm"`** — a **single service's** algorithm, decision tree, or control
+  flow: branches, loops, guards, recursion, early returns within one function/module.
+
+### Nested drill-down
+A process node whose core logic is itself a non-trivial algorithm can carry a
+`subDiagram` reference. In the rendered page that node is **drillable**: clicking it
+zooms into a nested diagram (its own layout/sidebar/docs), with a breadcrumb to climb
+back. This lets one artifact hold both the high-level flow **and** the algorithm
+detail without cramming them onto one canvas. See "When to nest a sub-diagram" below.
+
 ## Workflow
 
 ### Step 1: Understand the Request
 - Get the process/search term from the user (e.g., "user signup flow", "payment processing", "order creation")
 - Clarify scope if needed (frontend, backend, specific service)
+- **Decide the mode.** If the target spans multiple services/endpoints → `"process"`.
+  If it's the internal logic of a single function/module (an algorithm, a decision
+  tree, a state machine) → `"algorithm"`. When in doubt, ask, or default to `process`
+  and nest the algorithm as a sub-diagram (see Step 3).
 
 ### Step 2: Codebase Exploration
-Use these tools in sequence:
+Use these tools in sequence. Pick the lens that matches the mode.
+
+**Process mode — trace across services (the default lens):**
 
 1. **Find entry points**: Search for routes, handlers, CLI commands, scheduled jobs related to the process
    - Use `grep`, `rg`, `find` to locate relevant files
@@ -34,16 +55,83 @@ Use these tools in sequence:
    - Note data transformations at each step
    - Identify decision points and conditional branches
 
-### Step 3: Build the Flow Diagram Data
-Create a structured JSON representation with:
-- `processName`: name of the process
-- `entryPoints`: list of entry points with file:line
-- `nodes`: array of step nodes (id, label, type, file, line)
-- `edges`: array of connections (from, to, label)
-- `decisions`: decision points with conditions and next steps
-- `externalServices`: databases, APIs, third-party services
+**Algorithm mode — trace control flow *within* one function/module:**
 
-Node types: `endpoint`, `logic`, `database`, `external-service`, `decision`
+1. **Find the function**: locate the function/method and read it end to end. Note its
+   signature (parameters → `inputs`) and every `return`/throw (→ `outputs`/terminals).
+2. **Map control flow**, not service calls:
+   - Each `if`/`switch`/ternary/guard clause → a `decision` node; label every branch
+     ("true"/"false", case values, ranges).
+   - Each `for`/`while`/`map`/recursion → a `loop` node; the edge that returns to the
+     loop head is a **loop-back** edge (`loopBack: true`).
+   - Guard clauses and early returns → `return`/`terminal` nodes.
+   - Note preconditions/invariants the code assumes (→ `preconditions`).
+3. **Estimate complexity** (time/space) if it's meaningful (→ `complexity`).
+4. Keep nodes pointing at **line ranges within the one file** — in algorithm mode the
+   "which file" matters less than "which lines."
+
+### Step 3: Build the Flow Diagram Data
+Create a structured JSON representation. The full schema is documented in the comment
+at the top of `templates/flow-diagram.html`; the key fields:
+
+**Always:**
+- `processName`: title of the diagram
+- `description`: one-line summary
+- `diagramType`: `"process"` (default) or `"algorithm"`
+- `direction`: `"TB"` (default, top→bottom) or `"LR"` (left→right — better for wide
+  decision trees)
+- `nodes[]`: `{ id, label, type, file, line, description, subDiagram }`
+- `edges[]`: `{ id, from, to, label, loopBack }`
+  - `label`: branch text — "valid"/"invalid"/"true"/"false"/case values
+  - `loopBack: true`: a loop-back/repeat edge (drawn dashed + cyan, animated)
+- `decisions[]`: `{ id, label, file, line, branches:[{ when, then }] }`
+
+**Sidebar/docs sections — include whichever fit (they render only when present):**
+- `entryPoints[]`: `{ label, file, line }` (or a `"POST /x (file:line)"` string)
+- `externalServices[]`: databases, APIs, third-party services (process mode)
+- `inputs[]`: `{ name, type, description }` — function params (algorithm mode)
+- `preconditions[]`: strings — guards/assumptions (algorithm mode)
+- `outputs[]`: `{ name, type, description }` — return values (algorithm mode)
+- `complexity`: `"O(n log n)"` or `{ time, space }` (algorithm mode)
+
+**Node types:**
+- process: `endpoint` · `logic` · `database` · `external-service` · `decision`
+- algorithm: `start` · `terminal`/`return`/`end` · `logic` · `decision` · `loop` ·
+  `input` · `output`
+
+Positions are auto-computed (dagre) — **do not** supply `x`/`y`.
+
+#### When to nest a sub-diagram
+Emit a `subDiagram` when, while tracing a process, you hit a node whose internal logic
+is a non-trivial algorithm that deserves its own explanation (e.g. a matching
+algorithm, a ranking/scoring pass, a retry/backoff state machine). Instead of flattening
+its 15 decision nodes into the high-level flow:
+
+1. Keep the process node as one step, and add `"subDiagram": "<key>"` to it.
+2. Add a top-level `subDiagrams` registry: `{ "<key>": <full flow-data object> }`.
+   The nested object is a complete diagram in its own right — usually
+   `"diagramType": "algorithm"` with its own `inputs`/`outputs`/`nodes`/`edges`.
+3. Sub-diagrams may nest further (a sub-diagram node can reference another key).
+
+Rule of thumb: if a single node would need more than ~5–6 internal steps to explain,
+nest it rather than inlining. Keep each level readable.
+
+```json
+{
+  "nodes": [
+    { "id": "match", "label": "Match snapshot rows", "type": "logic",
+      "file": "src/match.js", "line": 12, "subDiagram": "match-algo" }
+  ],
+  "subDiagrams": {
+    "match-algo": {
+      "processName": "Row-Matching Algorithm",
+      "diagramType": "algorithm", "direction": "LR",
+      "inputs": [ ... ], "outputs": [ ... ],
+      "nodes": [ ... ], "edges": [ ... ]
+    }
+  }
+}
+```
 
 ### Step 4: Generate Interactive HTML with React Flow (docs-canvas style)
 
@@ -58,12 +146,13 @@ always start from the bundled template so output stays consistent.
    `./flow-diagrams/{process-name}-flow.html`. Never write generated files into the
    skill's install directory.
 3. Replace the placeholder JSON inside the `<script id="flow-data">` block with the
-   actual flow data:
-   - processName, description
-   - nodes (with file:line, type, label)
-   - edges (from, to, label)
-   - decisions (conditions and next steps)
-   - entryPoints and externalServices
+   actual flow data (see the Step 3 schema and the template's header comment):
+   - processName, description, diagramType, direction
+   - nodes (with file:line, type, label; `subDiagram` where you nest)
+   - edges (from, to, label, loopBack)
+   - decisions, and the section data that fits (entryPoints/externalServices for
+     process; inputs/preconditions/outputs/complexity for algorithm)
+   - subDiagrams registry, if any node is drillable
 4. The HTML is self-contained and opens in any browser.
 5. Start a local HTTP server serving the output directory on a random port (see Step 5).
 6. Print the URL to the user.
@@ -75,33 +164,43 @@ The data is injected via an embedded JSON `<script>` block that the page reads o
 {
   "processName": "User Signup Flow",
   "description": "Handles user registration from request to database persistence",
+  "diagramType": "process",
   "nodes": [...],
   "edges": [...],
   "decisions": [...],
   "entryPoints": ["POST /api/auth/signup (src/routes/auth.js:45)"],
-  "externalServices": ["PostgreSQL", "SendGrid", "Redis"]
+  "externalServices": ["PostgreSQL", "SendGrid", "Redis"],
+  "subDiagrams": { "...": { "diagramType": "algorithm", "...": "..." } }
 }
 </script>
 ```
 
 The generated page (docs-canvas style) includes:
 
-- A fixed left sidebar with the process name/description, a table-of-contents nav
-  (Entry Points, Core Flow Steps, Decision Points, External Services), a clickable
-  entry-points list, and the external-dependency list
+- A fixed left sidebar with the title/description and a table-of-contents nav that
+  adapts to the data (Entry Points / Inputs / Preconditions / Steps / Decision Points
+  / Outputs / External Services — only those present), plus a clickable entry-points
+  or inputs list and any external-dependency / complexity info
 - A main area with the interactive React Flow diagram on top and detailed,
   anchored documentation sections below it
 - Color-coded React Flow nodes by type:
-  - endpoint: blue (#3b82f6) — rounded/pill
+  - endpoint: blue (#3b82f6) — pill
   - logic: green (#22c55e) — rectangle
   - database: orange (#f97316) — rectangle with DB icon
   - external-service: purple (#a855f7) — rectangle with external icon
   - decision: yellow diamond (#eab308)
+  - start/terminal/return/end: stadium (teal / slate)
+  - loop: cyan (#06b6d4), dashed
+  - input/output: pink (#ec4899) / indigo (#6366f1)
 - Clickable nodes (`openCodeFile(filePath, line)`) that open the file in
   Claude/Cursor's viewer, fall back to an editor deep link / `file://` URL, and
   show a friendly message if it can't open
+- **Drillable nodes** (those with a `subDiagram`): a double border + `⤵` badge;
+  clicking the body zooms into the nested diagram with a breadcrumb to climb back,
+  while clicking the node's file:line still opens the code
 - Hover tooltips showing file:line, context, and what the step does
-- Edges labeled for decision branches ("valid", "invalid", "true", "false", …)
+- Edges labeled for branches ("valid"/"invalid"/"true"/"false"/cases); loop-back
+  edges drawn dashed + cyan
 - Zoom/pan, a minimap, and an "Export to PNG" button
 
 ### Step 5: Spin Up Local Server
@@ -151,10 +250,13 @@ Export to PNG using the button in the diagram.
 
 ### HTML Page Features:
 - Interactive React Flow (xyflow) diagram with zoom/pan and a minimap
-- Fixed sidebar with process description and table-of-contents navigation
-- Detailed documentation sections (entry points, steps, decisions, services) below the diagram
+- Two modes (process / algorithm) from one template, via `diagramType`
+- Auto-layout (dagre) — no manual coordinates; handles loops/cycles; TB or LR
+- Drill-down: click a node with a `subDiagram` to zoom in; breadcrumbs to climb back
+- Adaptive sidebar + table-of-contents (sections render only when their data exists)
+- Detailed documentation sections below the diagram
 - Clickable code references that open files in the editor
-- Color-coded node types with shape/icon per type
+- Color-coded node types with shape/icon per type (incl. start/terminal/loop/input/output)
 - Hover tooltips with file:line and context
 - Export to PNG
 

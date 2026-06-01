@@ -86,6 +86,20 @@
     }
     .export-btn:hover { background: #1d4ed8; }
 
+    .breadcrumbs {
+      position: absolute; top: 12px; left: 14px; z-index: 10;
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      font-size: 13px; max-width: calc(100% - 160px);
+    }
+    .crumb {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 7px; padding: 4px 9px; cursor: pointer; color: var(--text);
+      font: inherit; box-shadow: 0 1px 4px rgba(15,23,42,0.1);
+    }
+    .crumb:hover { background: var(--bg); }
+    .crumb.current { font-weight: 700; cursor: default; }
+    .crumb-sep { color: var(--muted); }
+
     .docs { padding: 28px 36px 80px; max-width: 900px; }
     .docs section { margin-bottom: 34px; scroll-margin-top: 16px; }
     .docs h2 {
@@ -115,8 +129,25 @@
     .node.logic { border-radius: 8px; }
     .node.database { border-radius: 8px; }
     .node.external-service { border-radius: 8px; }
+    /* algorithm / control-flow node shapes */
+    .node.start, .node.terminal, .node.return, .node.end { border-radius: 999px; }
+    .node.loop { border-radius: 8px; border-style: dashed; }
+    .node.input, .node.output { border-radius: 8px; }
     .node.clickable { cursor: pointer; }
     .node.clickable:hover { box-shadow: 0 4px 14px rgba(15,23,42,0.2); transform: translateY(-1px); }
+    /* drillable node: has a nested sub-diagram */
+    .node.has-detail { border-style: double; border-width: 4px; }
+    .node .drill-badge {
+      position: absolute; top: -9px; right: -9px; z-index: 2;
+      background: var(--accent); color: #fff; border-radius: 999px;
+      font-size: 11px; line-height: 1; padding: 4px 7px;
+      box-shadow: 0 2px 6px rgba(15,23,42,0.3);
+    }
+    .node-file.as-button {
+      background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+    }
+    .node-file.as-button:hover { text-decoration: underline; }
+    .drill-hint { font-size: 10px; color: var(--accent); margin-top: 3px; }
     .node-head { display: flex; align-items: center; justify-content: center; gap: 6px; }
     .node-icon { font-size: 13px; }
     .node-badge {
@@ -168,16 +199,47 @@
 
   <!--
     FLOW DATA — replace the JSON below with the traced flow.
+
+    Works in two modes (set diagramType; default "process"):
+      "process"   — a flow that spans multiple services (the original use case)
+      "algorithm" — a single service's algorithm / decision tree / control flow
+
     Schema:
-      processName   : string
+      processName   : string                 (title)
       description   : string
-      nodes[]       : { id, label, type, file, line, description }
-                      type one of: endpoint | logic | database | external-service | decision
+      diagramType   : "process" | "algorithm"   (default "process")
+      direction     : "TB" | "LR"            (layout direction; default "TB".
+                                              LR reads better for wide decision trees)
+      nodes[]       : { id, label, type, file, line, description, subDiagram }
+                      type one of:
+                        process : endpoint | logic | database | external-service | decision
+                        algorithm: start | terminal | return | end | logic | decision |
+                                   loop | input | output
                       (positions are auto-computed via dagre — no need to supply x/y)
-      edges[]       : { id, from, to, label }   (label e.g. "valid"/"invalid"/"true"/"false")
+                      subDiagram : optional key into subDiagrams below. Marks the node
+                                   as drillable: clicking the node body zooms into that
+                                   nested diagram (clicking its file:line still opens code).
+      edges[]       : { id, from, to, label, loopBack }
+                      label e.g. "valid"/"invalid"/"true"/"false"/case values.
+                      loopBack:true marks a loop-back / repeat edge (drawn dashed + cyan).
       decisions[]   : { id, label, file, line, branches:[{ when, then }] }
-      entryPoints[] : { label, file, line }  (a plain "POST /x (file:line)" string also works)
+
+      Sidebar / docs sections render only when their data is present, so include
+      whichever fit the diagram:
+      entryPoints[]      : { label, file, line }  ("POST /x (file:line)" string also works)
+      inputs[]           : { name, type, description } | string   (algorithm params)
+      preconditions[]    : string                 (guards/assumptions)
+      outputs[]          : { name, type, description } | string   (return values)
       externalServices[] : string
+      complexity         : string | { time, space }   (e.g. "O(n log n)")
+
+      subDiagrams   : { "<key>": <full flow-data object> }
+                      A flat registry of nested diagrams. A process node whose
+                      core logic is a non-trivial algorithm points at one of these
+                      via its `subDiagram` key. Each value is itself a complete
+                      flow-data object (own diagramType/direction/nodes/edges/…),
+                      so sub-diagrams can be process or algorithm and can nest
+                      further (a sub-diagram's node may reference another key here).
   -->
   <script id="flow-data" type="application/json">
   {
@@ -198,7 +260,7 @@
     ],
     "nodes": [
       { "id": "n1", "label": "POST /api/auth/signup", "type": "endpoint", "file": "src/routes/auth.js", "line": 45, "description": "Signup endpoint. Parses the request body and delegates to the auth service.", "position": { "x": 300, "y": 0 } },
-      { "id": "n2", "label": "Validate input", "type": "logic", "file": "src/services/auth.js", "line": 12, "description": "Checks email format and password strength before any DB work.", "position": { "x": 300, "y": 120 } },
+      { "id": "n2", "label": "Validate input", "type": "logic", "file": "src/services/auth.js", "line": 12, "description": "Checks email format and password strength before any DB work. Click to drill into the validation algorithm.", "subDiagram": "input-validation" },
       { "id": "n3", "label": "Valid input?", "type": "decision", "file": "src/services/auth.js", "line": 20, "description": "Branches on validation result.", "position": { "x": 315, "y": 250 } },
       { "id": "n4", "label": "Return 400 error", "type": "logic", "file": "src/services/auth.js", "line": 25, "description": "Responds with validation errors.", "position": { "x": 580, "y": 280 } },
       { "id": "n5", "label": "Hash password", "type": "logic", "file": "src/services/auth.js", "line": 30, "description": "Hashes the password with bcrypt before storage.", "position": { "x": 300, "y": 420 } },
@@ -216,7 +278,47 @@
       { "id": "e6", "from": "n6", "to": "n7" },
       { "id": "e7", "from": "n7", "to": "n8" },
       { "id": "e8", "from": "n8", "to": "n9" }
-    ]
+    ],
+    "subDiagrams": {
+      "input-validation": {
+        "processName": "Input Validation Algorithm",
+        "description": "How the signup payload is validated before any persistence.",
+        "diagramType": "algorithm",
+        "direction": "TB",
+        "inputs": [
+          { "name": "email", "type": "string", "description": "Raw email from the request body." },
+          { "name": "password", "type": "string", "description": "Raw password from the request body." }
+        ],
+        "preconditions": ["Request body is JSON-parsed"],
+        "outputs": [
+          { "name": "errors", "type": "string[]", "description": "Empty when the payload is valid." }
+        ],
+        "complexity": { "time": "O(1)", "space": "O(1)" },
+        "decisions": [
+          { "id": "v2", "label": "email matches regex?", "file": "src/services/validate.js", "line": 8,
+            "branches": [{ "when": "no", "then": "push 'invalid email'" }, { "when": "yes", "then": "check password" }] },
+          { "id": "v4", "label": "password length >= 8?", "file": "src/services/validate.js", "line": 14,
+            "branches": [{ "when": "no", "then": "push 'weak password'" }, { "when": "yes", "then": "done" }] }
+        ],
+        "nodes": [
+          { "id": "v1", "label": "start", "type": "start" },
+          { "id": "v2", "label": "email matches regex?", "type": "decision", "file": "src/services/validate.js", "line": 8, "description": "RFC-lite email check." },
+          { "id": "v3", "label": "push 'invalid email'", "type": "logic", "file": "src/services/validate.js", "line": 9, "description": "Records an email error." },
+          { "id": "v4", "label": "password length >= 8?", "type": "decision", "file": "src/services/validate.js", "line": 14, "description": "Minimum length guard." },
+          { "id": "v5", "label": "push 'weak password'", "type": "logic", "file": "src/services/validate.js", "line": 15, "description": "Records a password error." },
+          { "id": "v6", "label": "return errors", "type": "return", "file": "src/services/validate.js", "line": 18, "description": "Empty array means valid." }
+        ],
+        "edges": [
+          { "from": "v1", "to": "v2" },
+          { "from": "v2", "to": "v3", "label": "no" },
+          { "from": "v2", "to": "v4", "label": "yes" },
+          { "from": "v3", "to": "v4" },
+          { "from": "v4", "to": "v5", "label": "no" },
+          { "from": "v4", "to": "v6", "label": "yes" },
+          { "from": "v5", "to": "v6" }
+        ]
+      }
+    }
   }
   </script>
 
@@ -255,6 +357,14 @@
       database: "#f97316",
       "external-service": "#a855f7",
       decision: "#eab308",
+      // algorithm / control-flow
+      start: "#14b8a6",
+      terminal: "#475569",
+      return: "#475569",
+      end: "#475569",
+      loop: "#06b6d4",
+      input: "#ec4899",
+      output: "#6366f1",
     };
     const TYPE_ICONS = {
       endpoint: "🌐",
@@ -262,10 +372,31 @@
       database: "🗄️",
       "external-service": "🔗",
       decision: "❓",
+      start: "▶",
+      terminal: "⏹",
+      return: "↩",
+      end: "⏹",
+      loop: "🔁",
+      input: "📥",
+      output: "📤",
     };
     const TYPE_BADGE = { "external-service": "external" };
 
     const flowData = JSON.parse(document.getElementById("flow-data").textContent);
+
+    // Flat registry of nested sub-diagrams, referenced by a node's `subDiagram` key.
+    // Each value is a full flow-data object (its own nodes/edges/diagramType/etc.).
+    const SUBDIAGRAMS = flowData.subDiagrams || {};
+
+    // Layout direction is per-diagram: TB (top-bottom) default, LR for wide trees.
+    function posFor(dir) {
+      return dir === "LR"
+        ? { target: Position.Left, source: Position.Right }
+        : { target: Position.Top, source: Position.Bottom };
+    }
+    function dirOf(diagram) {
+      return (diagram.direction || "TB").toUpperCase() === "LR" ? "LR" : "TB";
+    }
 
     // Normalize an entry point that may be a string "Label (file:line)" or an object.
     function normalizeRef(ref) {
@@ -316,20 +447,34 @@
       toastTimer = setTimeout(() => el.remove(), 6000);
     }
 
-    /* ---------- Custom node ---------- */
+    /* ---------- Custom node ----------
+       Click handling lives at the canvas level (onNodeClick): a node with a
+       subDiagram drills in; otherwise it opens its code. The file:line ref is a
+       button that stops propagation, so on a drillable node you can still open
+       the code without drilling. */
     function FlowNode({ data }) {
       const [hover, setHover] = useState(false);
       const color = TYPE_COLORS[data.type] || "#64748b";
       const icon = TYPE_ICONS[data.type] || "•";
       const isDecision = data.type === "decision";
-      const clickable = !!data.file;
+      const hasDetail = !!data.subDiagram;
+      const clickable = !!(data.file || hasDetail);
       const badge = TYPE_BADGE[data.type] || data.type;
+      const targetPos = data._targetPos || Position.Top;
+      const sourcePos = data._sourcePos || Position.Bottom;
 
-      const tooltip = (hover && (data.description || data.file)) ? html`
+      const tooltip = (hover && (data.description || data.file || hasDetail)) ? html`
         <div class="tooltip">
           ${data.file ? html`<span class="t-ref">${data.file}${data.line ? ":" + data.line : ""}</span>` : null}
           ${data.description || ""}
+          ${hasDetail ? html`<div style=${{ marginTop: "5px", color: "#93c5fd" }}>Click to open detail ⤵</div>` : null}
         </div>` : null;
+
+      const fileRef = data.file ? html`
+        <button class="node-file as-button"
+                onClick=${(e) => { e.stopPropagation(); openCodeFile(data.file, data.line); }}>
+          ${data.file}${data.line ? ":" + data.line : ""}
+        </button>` : null;
 
       const content = html`
         <div class="node-content">
@@ -338,32 +483,35 @@
             <span class="node-badge" style=${{ background: color }}>${badge}</span>
           </div>
           <div class="node-label">${data.label}</div>
-          ${data.file ? html`<div class="node-file">${data.file}${data.line ? ":" + data.line : ""}</div>` : null}
+          ${fileRef}
+          ${hasDetail ? html`<div class="drill-hint">▸ open detail</div>` : null}
         </div>`;
 
       const handlers = {
         onMouseEnter: () => setHover(true),
         onMouseLeave: () => setHover(false),
-        onClick: () => clickable && openCodeFile(data.file, data.line),
       };
+      const cls = (extra) => "node " + extra
+        + (clickable ? " clickable" : "") + (hasDetail ? " has-detail" : "");
 
       if (isDecision) {
         return html`
-          <div class=${"node decision" + (clickable ? " clickable" : "")} ...${handlers}>
+          <div class=${cls("decision")} ...${handlers}>
             <div class="diamond-bg"></div>
-            <${Handle} type="target" position=${Position.Top} />
+            ${hasDetail ? html`<span class="drill-badge">⤵</span>` : null}
+            <${Handle} type="target" position=${targetPos} />
             ${content}
-            <${Handle} type="source" position=${Position.Bottom} />
+            <${Handle} type="source" position=${sourcePos} />
             ${tooltip}
           </div>`;
       }
 
       return html`
-        <div class=${"node " + data.type + (clickable ? " clickable" : "")}
-             style=${{ borderColor: color }} ...${handlers}>
-          <${Handle} type="target" position=${Position.Top} />
+        <div class=${cls(data.type)} style=${{ borderColor: color }} ...${handlers}>
+          ${hasDetail ? html`<span class="drill-badge">⤵</span>` : null}
+          <${Handle} type="target" position=${targetPos} />
           ${content}
-          <${Handle} type="source" position=${Position.Bottom} />
+          <${Handle} type="source" position=${sourcePos} />
           ${tooltip}
         </div>`;
     }
@@ -373,32 +521,20 @@
     // rendered node so multi-line labels never overlap).
     const NODE_SIZE = { width: 230, height: 110 };
     const DECISION_SIZE = { width: 170, height: 170 };
-    const sizeFor = (type) => (type === "decision" ? DECISION_SIZE : NODE_SIZE);
-
-    const rawNodes = (flowData.nodes || []).map((n) => ({
-      id: n.id, type: "flowNode", position: { x: 0, y: 0 }, data: n,
-    }));
-    const initialEdges = (flowData.edges || []).map((e, i) => ({
-      id: e.id || "e" + i,
-      source: e.from || e.source,
-      target: e.to || e.target,
-      label: e.label,
-      type: "smoothstep",
-      labelStyle: { fill: "#0f172a", fontSize: 12, fontWeight: 600 },
-      labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95 },
-      labelBgPadding: [6, 3],
-      labelBgBorderRadius: 6,
-      style: { stroke: "#475569", strokeWidth: 2 },
-      markerEnd: { type: "arrowclosed", color: "#475569", width: 20, height: 20 },
-    }));
+    const TERMINAL_SIZE = { width: 200, height: 80 };
+    const TERMINAL_TYPES = new Set(["start", "terminal", "return", "end"]);
+    const sizeFor = (type) =>
+      type === "decision" ? DECISION_SIZE
+      : TERMINAL_TYPES.has(type) ? TERMINAL_SIZE
+      : NODE_SIZE;
 
     // Auto-layout with dagre so nodes never overlap and edges stay readable.
-    // This overrides any positions in the data — the tracer doesn't need to
-    // compute coordinates.
-    function autoLayout(nodes, edges) {
+    // Honors the diagram's direction (TB/LR) and handles cycles/back-edges
+    // (loops) automatically. Overrides any positions in the data.
+    function autoLayout(nodes, edges, dir) {
       try {
         const g = new dagre.graphlib.Graph();
-        g.setGraph({ rankdir: "TB", nodesep: 80, ranksep: 110, marginx: 24, marginy: 24 });
+        g.setGraph({ rankdir: dir, nodesep: 80, ranksep: 110, marginx: 24, marginy: 24 });
         g.setDefaultEdgeLabel(() => ({}));
         nodes.forEach((n) => {
           const s = sizeFor(n.data.type);
@@ -418,9 +554,88 @@
         }));
       }
     }
-    const initialNodes = autoLayout(rawNodes, initialEdges);
 
-    function exportPng() {
+    function normalizeNamed(item) {
+      if (item && typeof item === "object")
+        return { label: item.name || item.label || "", type: item.type,
+                 description: item.description, file: item.file, line: item.line };
+      return { label: String(item) };
+    }
+    function complexityText(c) {
+      if (!c) return null;
+      if (typeof c === "string") return c;
+      const parts = [];
+      if (c.time) parts.push("Time " + c.time);
+      if (c.space) parts.push("Space " + c.space);
+      return parts.join(" · ") || null;
+    }
+
+    /* ---------- Build everything derived from one diagram ----------
+       Called per active level so drill-down sub-diagrams each get their own
+       layout, sidebar, and docs. Sections render only when data is present, so
+       the same builder serves process flows and single-service algorithms. */
+    function buildDiagram(diagram) {
+      const dir = dirOf(diagram);
+      const pos = posFor(dir);
+      const diagramType = (diagram.diagramType || "process").toLowerCase();
+
+      const rawNodes = (diagram.nodes || []).map((n) => ({
+        id: n.id, type: "flowNode",
+        position: { x: 0, y: 0 },
+        sourcePosition: pos.source, targetPosition: pos.target,
+        data: { ...n, _sourcePos: pos.source, _targetPos: pos.target },
+      }));
+      const edges = (diagram.edges || []).map((e, i) => {
+        const loop = !!(e.loopBack || e.kind === "loop");
+        return {
+          id: e.id || "e" + i,
+          source: e.from || e.source,
+          target: e.to || e.target,
+          label: e.label,
+          type: "smoothstep",
+          animated: loop,
+          labelStyle: { fill: "#0f172a", fontSize: 12, fontWeight: 600 },
+          labelBgStyle: { fill: "#ffffff", fillOpacity: 0.95 },
+          labelBgPadding: [6, 3],
+          labelBgBorderRadius: 6,
+          style: loop
+            ? { stroke: "#06b6d4", strokeWidth: 2, strokeDasharray: "6 4" }
+            : { stroke: "#475569", strokeWidth: 2 },
+          markerEnd: { type: "arrowclosed", color: loop ? "#06b6d4" : "#475569", width: 20, height: 20 },
+        };
+      });
+      const nodes = autoLayout(rawNodes, edges, dir);
+
+      const D = {
+        entries: (diagram.entryPoints || []).map(normalizeRef),
+        inputs: (diagram.inputs || []).map(normalizeNamed),
+        preconditions: diagram.preconditions || [],
+        steps: (diagram.nodes || []).filter((n) => n.type !== "decision"),
+        decisions: diagram.decisions || [],
+        outputs: (diagram.outputs || []).map(normalizeNamed),
+        externals: diagram.externalServices || [],
+        complexity: complexityText(diagram.complexity),
+      };
+      const stepsTitle = diagramType === "algorithm" ? "Steps" : "Core Flow Steps";
+      const sections = [
+        D.entries.length && { id: "entry-points", label: "Entry Points" },
+        D.inputs.length && { id: "inputs", label: "Inputs / Parameters" },
+        D.preconditions.length && { id: "preconditions", label: "Preconditions" },
+        D.steps.length && { id: "steps", label: stepsTitle },
+        D.decisions.length && { id: "decision-points", label: "Decision Points" },
+        D.outputs.length && { id: "outputs", label: "Outputs / Returns" },
+        D.externals.length && { id: "external-services", label: "External Services" },
+      ].filter(Boolean);
+
+      return {
+        diagramType, dir,
+        title: diagram.processName || "Flow Diagram",
+        description: diagram.description || "",
+        nodes, edges, D, stepsTitle, sections,
+      };
+    }
+
+    function exportPng(name) {
       const target = document.querySelector(".react-flow__viewport");
       const container = document.querySelector(".react-flow");
       if (!target || !container) return;
@@ -431,114 +646,153 @@
         style: { width: container.clientWidth + "px", height: container.clientHeight + "px" },
       }).then((dataUrl) => {
         const a = document.createElement("a");
-        a.download = (flowData.processName || "flow").replace(/\s+/g, "-").toLowerCase() + ".png";
+        a.download = (name || "flow").replace(/\s+/g, "-").toLowerCase() + ".png";
         a.href = dataUrl;
         a.click();
       }).catch(() => showToast("PNG export failed."));
     }
 
+    function refCard(label, file, line, color, icon) {
+      return html`
+        <div class="card" style=${{ borderLeftColor: color }}>
+          <div class="card-head">
+            <span class="icon">${icon}</span>
+            <span class="name">${label}</span>
+            ${file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(file, line)}><code>${file}${line ? ":" + line : ""}</code></button></span>` : null}
+          </div>
+        </div>`;
+    }
+
     /* ---------- Sidebar ---------- */
-    function Sidebar() {
-      const entries = (flowData.entryPoints || []).map(normalizeRef);
-      const externals = flowData.externalServices || [];
+    function Sidebar({ model }) {
+      const { D, sections } = model;
       return html`
         <aside class="sidebar">
-          <h1 class="title">${flowData.processName || "Flow Diagram"}</h1>
-          <div class="subtitle">${flowData.description || ""}</div>
+          <h1 class="title">${model.title}</h1>
+          ${model.diagramType === "algorithm" ? html`<span class="pill">algorithm</span>` : null}
+          <div class="subtitle">${model.description}</div>
 
           <nav class="toc">
-            <a href="#entry-points">Entry Points</a>
-            <a href="#core-flow">Core Flow Steps</a>
-            <a href="#decision-points">Decision Points</a>
-            <a href="#external-services">External Services</a>
+            ${sections.map((s) => html`<a href=${"#" + s.id} key=${s.id}>${s.label}</a>`)}
           </nav>
 
-          <div class="side-section">
-            <h3>Entry Points</h3>
-            <ul>
-              ${entries.length ? entries.map((e, i) => html`
+          ${D.entries.length ? html`
+            <div class="side-section">
+              <h3>Entry Points</h3>
+              <ul>${D.entries.map((e, i) => html`
                 <li key=${i}>
                   ${e.file
                     ? html`<button class="link-btn" onClick=${() => openCodeFile(e.file, e.line)}>${e.label}</button>
                            <div><code>${e.file}${e.line ? ":" + e.line : ""}</code></div>`
                     : e.label}
-                </li>`) : html`<li>None recorded</li>`}
-            </ul>
-          </div>
+                </li>`)}</ul>
+            </div>` : null}
 
-          <div class="side-section">
-            <h3>External Dependencies</h3>
-            <div>
-              ${externals.length
-                ? externals.map((e, i) => html`<span class="pill" key=${i}>${e}</span>`)
-                : html`<span>None recorded</span>`}
-            </div>
-          </div>
+          ${D.inputs.length ? html`
+            <div class="side-section">
+              <h3>Inputs / Parameters</h3>
+              <ul>${D.inputs.map((p, i) => html`
+                <li key=${i}><strong>${p.label}</strong>${p.type ? html` <code>${p.type}</code>` : null}</li>`)}</ul>
+            </div>` : null}
+
+          ${D.externals.length ? html`
+            <div class="side-section">
+              <h3>External Dependencies</h3>
+              <div>${D.externals.map((e, i) => html`<span class="pill" key=${i}>${e}</span>`)}</div>
+            </div>` : null}
+
+          ${D.complexity ? html`
+            <div class="side-section">
+              <h3>Complexity</h3>
+              <div><code>${D.complexity}</code></div>
+            </div>` : null}
         </aside>`;
     }
 
     /* ---------- Docs sections below the diagram ---------- */
-    function Docs() {
-      const entries = (flowData.entryPoints || []).map(normalizeRef);
-      const steps = (flowData.nodes || []).filter((n) => n.type !== "decision");
-      const decisions = flowData.decisions || [];
-      const externals = flowData.externalServices || [];
-
+    function Docs({ model }) {
+      const { D, stepsTitle: STEPS_TITLE } = model;
       return html`
         <div class="docs">
-          <section id="entry-points">
-            <h2>Entry Points</h2>
-            ${entries.map((e, i) => html`
-              <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS.endpoint }}>
-                <div class="card-head">
-                  <span class="icon">🌐</span>
-                  <span class="name">${e.label}</span>
-                  ${e.file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(e.file, e.line)}><code>${e.file}:${e.line}</code></button></span>` : null}
-                </div>
-              </div>`)}
-          </section>
+          ${D.entries.length ? html`
+            <section id="entry-points"><h2>Entry Points</h2>
+              ${D.entries.map((e, i) => html`<div key=${i}>${refCard(e.label, e.file, e.line, TYPE_COLORS.endpoint, "🌐")}</div>`)}
+            </section>` : null}
 
-          <section id="core-flow">
-            <h2>Core Flow Steps</h2>
-            ${steps.map((n, i) => html`
-              <div class="card" key=${n.id} style=${{ borderLeftColor: TYPE_COLORS[n.type] || "#94a3b8" }}>
-                <div class="card-head">
-                  <span class="icon">${TYPE_ICONS[n.type] || "•"}</span>
-                  <span class="name">${i + 1}. ${n.label}</span>
-                  ${n.file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(n.file, n.line)}><code>${n.file}:${n.line}</code></button></span>` : null}
-                </div>
-                ${n.description ? html`<div class="body">${n.description}</div>` : null}
-              </div>`)}
-          </section>
+          ${D.inputs.length ? html`
+            <section id="inputs"><h2>Inputs / Parameters</h2>
+              ${D.inputs.map((p, i) => html`
+                <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS.input }}>
+                  <div class="card-head">
+                    <span class="icon">📥</span>
+                    <span class="name">${p.label}${p.type ? html` — ${p.type}` : null}</span>
+                  </div>
+                  ${p.description ? html`<div class="body">${p.description}</div>` : null}
+                </div>`)}
+            </section>` : null}
 
-          <section id="decision-points">
-            <h2>Decision Points</h2>
-            ${decisions.length ? decisions.map((d, i) => html`
-              <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS.decision }}>
-                <div class="card-head">
-                  <span class="icon">❓</span>
-                  <span class="name">${d.label || d.condition || "Decision"}</span>
-                  ${d.file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(d.file, d.line)}><code>${d.file}:${d.line}</code></button></span>` : null}
-                </div>
-                ${(d.branches || []).map((b, j) => html`
-                  <div class="branch" key=${j}><span class="when">${b.when}:</span> ${b.then}</div>`)}
-              </div>`) : html`<div class="card">No decision points recorded.</div>`}
-          </section>
+          ${D.preconditions.length ? html`
+            <section id="preconditions"><h2>Preconditions</h2>
+              ${D.preconditions.map((p, i) => html`
+                <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS.start }}>
+                  <div class="card-head"><span class="icon">✅</span><span class="name">${p}</span></div>
+                </div>`)}
+            </section>` : null}
 
-          <section id="external-services">
-            <h2>External Services</h2>
-            ${externals.length ? externals.map((e, i) => html`
-              <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS["external-service"] }}>
-                <div class="card-head"><span class="icon">🔗</span><span class="name">${e}</span></div>
-              </div>`) : html`<div class="card">No external services recorded.</div>`}
-          </section>
+          ${D.steps.length ? html`
+            <section id="steps"><h2>${STEPS_TITLE}</h2>
+              ${D.steps.map((n, i) => html`
+                <div class="card" key=${n.id} style=${{ borderLeftColor: TYPE_COLORS[n.type] || "#94a3b8" }}>
+                  <div class="card-head">
+                    <span class="icon">${TYPE_ICONS[n.type] || "•"}</span>
+                    <span class="name">${i + 1}. ${n.label}</span>
+                    ${n.file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(n.file, n.line)}><code>${n.file}:${n.line}</code></button></span>` : null}
+                  </div>
+                  ${n.description ? html`<div class="body">${n.description}</div>` : null}
+                </div>`)}
+            </section>` : null}
+
+          ${D.decisions.length ? html`
+            <section id="decision-points"><h2>Decision Points</h2>
+              ${D.decisions.map((d, i) => html`
+                <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS.decision }}>
+                  <div class="card-head">
+                    <span class="icon">❓</span>
+                    <span class="name">${d.label || d.condition || "Decision"}</span>
+                    ${d.file ? html`<span class="ref"><button class="link-btn" onClick=${() => openCodeFile(d.file, d.line)}><code>${d.file}:${d.line}</code></button></span>` : null}
+                  </div>
+                  ${(d.branches || []).map((b, j) => html`
+                    <div class="branch" key=${j}><span class="when">${b.when}:</span> ${b.then}</div>`)}
+                </div>`)}
+            </section>` : null}
+
+          ${D.outputs.length ? html`
+            <section id="outputs"><h2>Outputs / Returns</h2>
+              ${D.outputs.map((p, i) => html`
+                <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS.output }}>
+                  <div class="card-head">
+                    <span class="icon">📤</span>
+                    <span class="name">${p.label}${p.type ? html` — ${p.type}` : null}</span>
+                  </div>
+                  ${p.description ? html`<div class="body">${p.description}</div>` : null}
+                </div>`)}
+            </section>` : null}
+
+          ${D.externals.length ? html`
+            <section id="external-services"><h2>External Services</h2>
+              ${D.externals.map((e, i) => html`
+                <div class="card" key=${i} style=${{ borderLeftColor: TYPE_COLORS["external-service"] }}>
+                  <div class="card-head"><span class="icon">🔗</span><span class="name">${e}</span></div>
+                </div>`)}
+            </section>` : null}
         </div>`;
     }
 
     /* ---------- App ---------- */
-    function Diagram() {
-      const [nodes, , onNodesChange] = useNodesState(initialNodes);
-      const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+    function Diagram({ model, onNodeClick }) {
+      // Remounted (via key) on navigation, so useNodesState re-inits cleanly.
+      const [nodes, , onNodesChange] = useNodesState(model.nodes);
+      const [edges, , onEdgesChange] = useEdgesState(model.edges);
       return html`
         <${ReactFlow}
           nodes=${nodes}
@@ -546,6 +800,7 @@
           nodeTypes=${nodeTypes}
           onNodesChange=${onNodesChange}
           onEdgesChange=${onEdgesChange}
+          onNodeClick=${onNodeClick}
           fitView
           fitViewOptions=${{ padding: 0.2 }}
           minZoom=${0.1}
@@ -556,16 +811,48 @@
         <//>`;
     }
 
+    function Breadcrumbs({ stack, onJump }) {
+      return html`
+        <div class="breadcrumbs">
+          ${stack.map((c, i) => html`
+            <span key=${i} style=${{ display: "flex", alignItems: "center", gap: "6px" }}>
+              ${i > 0 ? html`<span class="crumb-sep">›</span>` : null}
+              ${i === stack.length - 1
+                ? html`<span class="crumb current">${c.title}</span>`
+                : html`<button class="crumb" onClick=${() => onJump(i)}>${c.title}</button>`}
+            </span>`)}
+        </div>`;
+    }
+
     function App() {
+      const [stack, setStack] = useState([
+        { key: "__root__", title: flowData.processName || "Flow", diagram: flowData },
+      ]);
+      const active = stack[stack.length - 1];
+      const model = React.useMemo(() => buildDiagram(active.diagram), [active]);
+
+      const drill = (key) => {
+        const sub = SUBDIAGRAMS[key];
+        if (!sub) { showToast("Sub-diagram <code>" + key + "</code> not found."); return; }
+        setStack((s) => [...s, { key, title: sub.processName || key, diagram: sub }]);
+      };
+      const jump = (idx) => setStack((s) => s.slice(0, idx + 1));
+      const onNodeClick = (_e, node) => {
+        const d = node.data || {};
+        if (d.subDiagram) drill(d.subDiagram);
+        else if (d.file) openCodeFile(d.file, d.line);
+      };
+
       return html`
         <div class="app">
-          <${Sidebar} />
+          <${Sidebar} model=${model} />
           <div class="main">
             <div class="diagram-wrap">
-              <button class="export-btn" onClick=${exportPng}>Export to PNG</button>
-              <${Diagram} />
+              ${stack.length > 1 ? html`<${Breadcrumbs} stack=${stack} onJump=${jump} />` : null}
+              <button class="export-btn" onClick=${() => exportPng(model.title)}>Export to PNG</button>
+              <${Diagram} key=${stack.length + ":" + active.key} model=${model} onNodeClick=${onNodeClick} />
             </div>
-            <${Docs} />
+            <${Docs} model=${model} />
           </div>
         </div>`;
     }
