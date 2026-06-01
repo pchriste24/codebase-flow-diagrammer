@@ -157,9 +157,9 @@ always start from the bundled template so output stays consistent.
    - decisions, and the section data that fits (entryPoints/externalServices for
      process; inputs/preconditions/outputs/complexity for algorithm)
    - subDiagrams registry, if any node is drillable
-4. The HTML is self-contained and opens in any browser.
-5. Start a local HTTP server serving the output directory on a random port (see Step 5).
-6. Print the URL to the user.
+4. The HTML is a single self-contained file (libraries load from CDN at runtime) —
+   open it directly in a browser; no server needed (see Step 5).
+5. Open the file for the user and tell them the path.
 
 The data is injected via an embedded JSON `<script>` block that the page reads on load:
 
@@ -208,14 +208,19 @@ The generated page (docs-canvas style) includes:
   edges drawn dashed + cyan
 - Zoom/pan, a minimap, and an "Export to PNG" button
 
-### Step 5: Spin Up Local Server
-- Serve the output directory created in Step 4 (e.g. `./flow-diagrams/`) on a random port.
-- Use the bundled helper (relative to this SKILL.md):
-  `bash bin/start-server.sh ./flow-diagrams` — it picks a random free port and prints the URL.
-  (Or run `python3 -m http.server <port>` from that directory directly.)
-- Run it in the background so the session can continue.
-- Print the local URL to the user (e.g., "http://localhost:4321/user-signup-flow.html").
+### Step 5: Open the Diagram
+The page loads everything from CDN and reads its data from an inline JSON block, so
+it needs **no local web server** — just open the file:
+- macOS: `open ./flow-diagrams/{process-name}-flow.html`
+- Linux: `xdg-open ...`  ·  Windows: `start ...`
+- Then give the user the file path so they can reopen it.
 - Provide a summary of the flow in the chat.
+
+**Fallback (rarely needed):** a few browsers (notably Firefox) are strict about
+loading ES modules over `file://`. If the page comes up blank there, serve the
+directory instead with the bundled helper (relative to this SKILL.md):
+`bash bin/start-server.sh ./flow-diagrams` — it picks a random free port, prints a
+`http://localhost:…` URL, and should be run in the background.
 
 ## Output Format
 
@@ -247,9 +252,10 @@ I've analyzed the `{process}` flow and created an interactive diagram.
 - Redis (session cache)
 
 ### Interactive Diagram
-Local page is spinning up at: **http://localhost:{PORT}/{process}-flow.html**
+Opened in your browser: **./flow-diagrams/{process}-flow.html**
 
-Click nodes to jump to code. Hover for context. Use sidebar to navigate sections.
+Click nodes to open code in VS Code. Hover for context. Use the sidebar to navigate
+sections, and click a node with a ⤵ badge to drill into its sub-diagram.
 Export to PNG using the button in the diagram.
 ```
 
@@ -276,14 +282,14 @@ When using Canvas, structure it like the HTML output:
 - Code reference blocks with clickable links
 - Sections grouped by importance
 
-If the user is **not** in Cursor IDE, use the standalone HTML + local server approach above.
+If the user is **not** in Cursor IDE, use the standalone HTML approach above.
 
 ## Tools Used
 - `grep`, `rg`, `find` -- for searching codebase
 - `Read` -- for reading files
-- `Bash` -- for running local server and generating HTML
+- `Bash` -- for copying the template, writing the diagram, and opening it in the browser
 
 ## Example Invocation
 User: `/codebase-flow-diagrammer:flow "user payment processing"`
 
-Result: Analyzes payment flow, creates interactive diagram at `http://localhost:4321/payment-processing-flow.html`
+Result: Analyzes payment flow, writes and opens `./flow-diagrams/payment-processing-flow.html`

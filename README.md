@@ -13,7 +13,7 @@ A Claude Code plugin that visualizes codebase processes with interactive React F
 - **Interactive Diagrams**: React Flow-based HTML pages with clickable code references
 - **Auto-layout**: nodes positioned by dagre (no overlap, handles loops/cycles; TB or LR)
 - **Guided Tours**: context, descriptions, and high-level decision points
-- **Local Server**: spins up a local page to view the diagram
+- **No server needed**: a single self-contained HTML file you open directly in a browser
 
 ## Installation
 
@@ -61,15 +61,15 @@ skill picks `algorithm` mode and traces the internal control flow.
 1. **Investigates** the codebase to find the relevant process
 2. **Traces** the execution flow from entry point to completion
 3. **Generates** an interactive HTML diagram with React Flow
-4. **Spins up** a local server to view the diagram
-5. **Provides** clickable references to code files
+4. **Opens** the self-contained HTML file directly in your browser
+5. **Provides** clickable references that open code in VS Code
 
 ## Output
 
 After investigation, you'll receive:
 - A summary of the process in the chat
-- A local URL to view the interactive diagram
-- Clickable nodes that jump to relevant code files
+- A self-contained HTML file (opened in your browser) with the interactive diagram
+- Clickable nodes that open the relevant code in VS Code
 
 ## Example
 
@@ -90,9 +90,9 @@ I've analyzed the authentication flow and created an interactive diagram.
 - TokenManager (src/utils/tokens.js)
 - User Model (src/models/User.js)
 
-**Diagram:** http://localhost:4321/user-authentication-flow.html
+**Diagram:** opened ./flow-diagrams/user-authentication-flow.html
 
-Click nodes to jump to code. Hover for context.
+Click nodes to open code in VS Code. Hover for context.
 ```
 
 ## Technical Details
